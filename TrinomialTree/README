@@ -3,3 +3,6 @@ $ g++ -std=c++17 *.cpp -o main -Wall
 
 // execute by running 
 $ ./main
+
+// linting
+$ clang-format -i -style=WebKit *.cpp *.hpp
