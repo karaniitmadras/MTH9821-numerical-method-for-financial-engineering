@@ -1,0 +1,5 @@
+// Compile by running command line 
+$ g++ -std=c++17 *.cpp -o main -Wall
+
+// execute by running 
+$ ./main
