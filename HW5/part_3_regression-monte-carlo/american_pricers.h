@@ -2,8 +2,6 @@
 #define MC_AMERICAN_PRICERS_H
 
 #include "mc_regression.h"
-#include "propre/types.h"
-#include "finance/instruments.h"
 
 namespace montecarlo {
 	typedef Eigen::ArrayXd arr;

@@ -1,9 +1,61 @@
 #include "regression.h"
 #include "mc_regression.h"
+#include "american_pricers.h"
+#include "util.h"
 #include <iostream>
 #include <cassert> // For simple unit tests.
 
 using namespace linalg::regression; // Contains the regression functions.
+
+namespace montecarlo
+{
+
+void priceExperiments(
+    double spot, double strike, double r, double sigma, 
+    double maturity, double dt, int M, int N, int Ne, unsigned long initialSeed, 
+    int degree, regression::MCRegression& mc_regression, const MonteCarloRegressionMethod& regression_method) {
+    
+    LCG lcg(39373, 0, pow(2, 31) - 1, initialSeed);
+    double cumulativePriceBackward = 0.0;
+    double cumulativePriceForward = 0.0;
+
+    for (int e = 0; e < Ne; ++e) {
+        arr2 paths = generatePaths(spot, r, 0, sigma, dt, M, N, lcg); // Assume dividend rate is 0
+
+        // regression_pricer_backward and regression_pricer_forward functions 
+        // TODO: @Karan, Can you check if I call functions correctly?
+        double priceBackward = regression_pricer_backward(
+            spot, paths, CallPutFlag::Put, strike, maturity,
+            r, mc_regression, regression_method);
+        double priceForward = regression_pricer_forward(
+            spot, paths, CallPutFlag::Put, strike, maturity,
+            r, mc_regression);
+
+        cumulativePriceBackward += priceBackward;
+        cumulativePriceForward += priceForward;
+    }
+
+    double averagePriceBackward = cumulativePriceBackward / Ne;
+    double averagePriceForward = cumulativePriceForward / Ne;
+
+    std::cout << "Average Price (Backward): " << averagePriceBackward << std::endl;
+    std::cout << "Average Price (Forward): " << averagePriceForward << std::endl;
+
+    // To calculate standard error:
+    // TODO: priceBackward here is out of scope, so error: use of undeclared identifier 'priceBackward'
+    double s_e_Backward = sqrt((pow(priceBackward - averagePriceBackward, 2) / Ne));
+    double s_e_Forward = sqrt((pow(priceForward - averagePriceForward, 2) / Ne));
+
+    std::cout << "Standard Error (Backward): " << s_e_Backward << std::endl;
+    std::cout << "Standard Error (Forward): " << s_e_Forward << std::endl;
+
+    // Comparison with binomial tree method
+    double binomialPrice = 4.079018801027898; // Given
+    std::cout << "Difference from binomial (Backward): " << averagePriceBackward - binomialPrice << std::endl;
+    std::cout << "Difference from binomial (Forward): " << averagePriceForward - binomialPrice << std::endl;
+}
+
+} // namespace montecarlo
 
 int main()
 {
@@ -80,6 +132,79 @@ int main()
     std::cout << "========================================" << std::endl;
     std::cout << "=========Regression Monte Carlo=========" << std::endl;
     std::cout << "========================================" << std::endl;
+
+    // Part 3.4 Calculations
+    // A Bermuda Put Parameters 
+    double spot = 40.5;
+    double strike = 44;
+    double r = 0.04; 
+    sigma = 0.2; // declared in Part 2
+    double maturity = 0.5;
+    double dt = 0.5 / 6;
+    double M = 6;
+    double N = 10000;
+    double Ne = 100;
+    unsigned long initialSeed = 100;
+
+    std::cout << std::endl;
+    std::cout << "========= In sample pricing experiment =========" << std::endl;
+    std::cout << std::endl;
+
+    // TODO: @Zhuo follow the way below to compute and generate all tables
+    std::cout << "========= Tsitsiklis_VanRoy  =========" << std::endl;
+    std::cout << "========= Power Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {   
+        bool precondition = false;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl; 
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::PolynomialMCRegression mc_regression = montecarlo::regression::PolynomialMCRegression(
+            N, degree, precondition); // TODO: @Karan, which variable to use for 'times'?
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Tsitsiklis_VanRoy);
+    }
+    std::cout << std::endl;
+
+    std::cout << "========= Tsitsiklis_VanRoy  =========" << std::endl;
+    std::cout << "========= Hermite Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {   
+        bool precondition = false;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl; 
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
+            N, degree, precondition, standardization); // TODO: @Karan, which variable to use for 'times'?
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Tsitsiklis_VanRoy);
+    }
+    std::cout << std::endl;
+
+    std::cout << "========= Tsitsiklis_VanRoy  =========" << std::endl;
+    std::cout << "========= Hermite Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {   
+        bool precondition = true;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl; 
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
+            N, degree, precondition, standardization); // TODO: which variable to use for 'times'?
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Tsitsiklis_VanRoy);
+    }
+    std::cout << std::endl;
+
+    // For �out-of-sample� paths
+    std::cout << std::endl;
+    std::cout << "========= Out of sample pricing experiment =========" << std::endl;
+    std::cout << std::endl;
+    initialSeed = 200;
+
+    // TODO: @Zhuo Similar to In-sample but use initialSeed=200
+    std::cout << "========= Longstaff_Schwartz  =========" << std::endl;
+    std::cout << "========= Power Based  =========" << std::endl;
 
 
     return 0;
