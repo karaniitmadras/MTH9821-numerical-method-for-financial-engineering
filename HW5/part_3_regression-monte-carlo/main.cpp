@@ -15,15 +15,19 @@ void priceExperiments(
     double maturity, double dt, int M, int N, int Ne, unsigned long initialSeed, 
     int degree, regression::MCRegression& mc_regression, const MonteCarloRegressionMethod& regression_method) {
     
+    bool in_sample;
+    if (initialSeed == 100) { in_sample = 1;} else { in_sample = 0;}
+
     LCG lcg(39373, 0, pow(2, 31) - 1, initialSeed);
     double cumulativePriceBackward = 0.0;
     double cumulativePriceForward = 0.0;
+    std::vector<double> price_Backward_vec;
+    std::vector<double> price_Forward_vec;
 
     for (int e = 0; e < Ne; ++e) {
         arr2 paths = generatePaths(spot, r, 0, sigma, dt, M, N, lcg); // Assume dividend rate is 0
 
         // regression_pricer_backward and regression_pricer_forward functions 
-        // TODO: @Karan, Can you check if I call functions correctly?
         double priceBackward = regression_pricer_backward(
             spot, paths, CallPutFlag::Put, strike, maturity,
             r, mc_regression, regression_method);
@@ -33,6 +37,8 @@ void priceExperiments(
 
         cumulativePriceBackward += priceBackward;
         cumulativePriceForward += priceForward;
+        price_Backward_vec.push_back(priceBackward);
+        price_Forward_vec.push_back(priceForward);
     }
 
     double averagePriceBackward = cumulativePriceBackward / Ne;
@@ -41,11 +47,21 @@ void priceExperiments(
     std::cout << "Average Price (Backward): " << averagePriceBackward << std::endl;
     std::cout << "Average Price (Forward): " << averagePriceForward << std::endl;
 
-    // To calculate standard error:
-    // TODO: priceBackward here is out of scope, so error: use of undeclared identifier 'priceBackward'
-    double s_e_Backward = sqrt((pow(priceBackward - averagePriceBackward, 2) / Ne));
-    double s_e_Forward = sqrt((pow(priceForward - averagePriceForward, 2) / Ne));
+    // 3.4 Sanity check for in-sample Longstaff_Schwartz setup
+    std::cout << "========= Sanity check on in-sample Longstaff_Schwartz results =========" << std::endl;
+    if ((regression_method == montecarlo::MonteCarloRegressionMethod::Longstaff_Schwartz) && (in_sample))
+    {
+        std::cout << "Backward Price = Forward Price" << (averagePriceBackward = averagePriceForward) << std::endl;
+    }
 
+    // To calculate standard error:
+    double s_e_Backward = 0.0;
+    double s_e_Forward = 0.0;
+    for (int e = 0; e < Ne; ++e)
+    {
+        s_e_Backward += sqrt((pow(price_Backward_vec[e] - averagePriceBackward, 2) / Ne));
+        s_e_Forward += sqrt((pow(price_Forward_vec[e] - averagePriceForward, 2) / Ne));
+    }
     std::cout << "Standard Error (Backward): " << s_e_Backward << std::endl;
     std::cout << "Standard Error (Forward): " << s_e_Forward << std::endl;
 
@@ -160,7 +176,7 @@ int main()
         std::cout << "Precondition: " << precondition << std::endl; 
         std::cout << "Standardization: " << standardization << std::endl;
         montecarlo::regression::PolynomialMCRegression mc_regression = montecarlo::regression::PolynomialMCRegression(
-            N, degree, precondition); // TODO: @Karan, which variable to use for 'times'?
+            M, degree, precondition);
         montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
             degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Tsitsiklis_VanRoy);
     }
@@ -175,7 +191,7 @@ int main()
         std::cout << "Precondition: " << precondition << std::endl; 
         std::cout << "Standardization: " << standardization << std::endl;
         montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
-            N, degree, precondition, standardization); // TODO: @Karan, which variable to use for 'times'?
+            M, degree, precondition, standardization);
         montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
             degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Tsitsiklis_VanRoy);
     }
@@ -190,11 +206,57 @@ int main()
         std::cout << "Precondition: " << precondition << std::endl; 
         std::cout << "Standardization: " << standardization << std::endl;
         montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
-            N, degree, precondition, standardization); // TODO: which variable to use for 'times'?
+            M, degree, precondition, standardization);
         montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
             degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Tsitsiklis_VanRoy);
     }
     std::cout << std::endl;
+
+    std::cout << "========= Longstaff_Schwartz  =========" << std::endl;
+    std::cout << "========= Power Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {
+        bool precondition = false;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl;
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
+            M, degree, precondition, standardization);
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Longstaff_Schwartz);
+    }
+    std::cout << std::endl;
+
+    std::cout << "========= Longstaff_Schwartz  =========" << std::endl;
+    std::cout << "========= Hermite Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {
+        bool precondition = false;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl;
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
+            M, degree, precondition, standardization);
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Longstaff_Schwartz);
+    }
+    std::cout << std::endl;
+
+    std::cout << "========= Longstaff_Schwartz  =========" << std::endl;
+    std::cout << "========= Hermite Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {
+        bool precondition = true;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl;
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
+            M, degree, precondition, standardization);
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Longstaff_Schwartz);
+    }
+    std::cout << std::endl;
+
 
     // For �out-of-sample� paths
     std::cout << std::endl;
@@ -202,10 +264,95 @@ int main()
     std::cout << std::endl;
     initialSeed = 200;
 
-    // TODO: @Zhuo Similar to In-sample but use initialSeed=200
+    std::cout << "========= Tsitsiklis_VanRoy  =========" << std::endl;
+    std::cout << "========= Power Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {
+        bool precondition = false;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl;
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::PolynomialMCRegression mc_regression = montecarlo::regression::PolynomialMCRegression(
+            M, degree, precondition);
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Tsitsiklis_VanRoy);
+    }
+    std::cout << std::endl;
+
+    std::cout << "========= Tsitsiklis_VanRoy  =========" << std::endl;
+    std::cout << "========= Hermite Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {
+        bool precondition = false;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl;
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
+            M, degree, precondition, standardization);
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Tsitsiklis_VanRoy);
+    }
+    std::cout << std::endl;
+
+    std::cout << "========= Tsitsiklis_VanRoy  =========" << std::endl;
+    std::cout << "========= Hermite Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {
+        bool precondition = true;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl;
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
+            M, degree, precondition, standardization);
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Tsitsiklis_VanRoy);
+    }
+    std::cout << std::endl;
+
     std::cout << "========= Longstaff_Schwartz  =========" << std::endl;
     std::cout << "========= Power Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {
+        bool precondition = false;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl;
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
+            M, degree, precondition, standardization);
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Longstaff_Schwartz);
+    }
+    std::cout << std::endl;
 
+    std::cout << "========= Longstaff_Schwartz  =========" << std::endl;
+    std::cout << "========= Hermite Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {
+        bool precondition = false;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl;
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
+            M, degree, precondition, standardization);
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Longstaff_Schwartz);
+    }
+    std::cout << std::endl;
+
+    std::cout << "========= Longstaff_Schwartz  =========" << std::endl;
+    std::cout << "========= Hermite Based  =========" << std::endl;
+    for (int degree = 2; degree < 11; degree++)
+    {
+        bool precondition = true;
+        bool standardization = false;
+        std::cout << "Precondition: " << precondition << std::endl;
+        std::cout << "Standardization: " << standardization << std::endl;
+        montecarlo::regression::HermiteMCRegression mc_regression = montecarlo::regression::HermiteMCRegression(
+            M, degree, precondition, standardization);
+        montecarlo::priceExperiments(spot, strike, r, sigma, maturity, dt, M, N, Ne, initialSeed,
+            degree, mc_regression, montecarlo::MonteCarloRegressionMethod::Longstaff_Schwartz);
+    }
+    std::cout << std::endl;
 
     return 0;
 }
