@@ -33,7 +33,16 @@ namespace montecarlo {
                 P = E;
             }
             else {
-                C = mc_regression.fit_predict(j, paths.col(j), P * exp(-interest_rate * dt));
+
+                if (j == 0) {
+
+                    C = mc_regression.fit_predict_at_0( P * exp(-interest_rate * dt));
+                }
+                else
+                {
+                    C = mc_regression.fit_predict(j, paths.col(j), P * exp(-interest_rate * dt));
+                }
+                
 
                 if (method == Longstaff_Schwartz) {
                     for (int i = 0; i < N; i++) {
@@ -51,7 +60,7 @@ namespace montecarlo {
             }
         }
 
-        return P.mean() * exp(-interest_rate * dt);
+        return P.mean();
     }
 
     double regression_pricer_forward(const double spot, const arr2& paths, const int w, const double strike, const double maturity,
