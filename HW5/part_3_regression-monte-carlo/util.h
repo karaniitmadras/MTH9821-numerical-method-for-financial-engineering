@@ -2,11 +2,14 @@
 #define UTIL_H
 
 #include "mc_regression.h"
-#include "american_pricers.h"
+//#include "american_pricers.h"
 #include <vector>
 
 namespace montecarlo
 {
+    typedef Eigen::ArrayXd arr;
+    typedef Eigen::ArrayXXd arr2;
+
     // Utility Functions
     class LCG {
     private:
